@@ -1,0 +1,391 @@
+---
+title: "Linking Up: Towards a Typology of Social Knowledge Production in Virtual Citizen Science"
+author: "Corey Jackson"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    fig_caption: yes
+    highlight: pygments
+    number_sections: yes
+    theme: spacelab
+    toc: yes
+    toc_float:
+      smooth_scroll: no
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+always_allow_html: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+# Introduction
+People in open collaboration
+
+This article investigates the co-production of knowledge resources by contributors to virtual citizen science projects. 
+
+### Research question
+
+<b> What types of links define the knowledge production work by volunteers in virtual citizen science projects? </b>
+
+# Methods
+We collected a database dump of comments posted on the Gravity Spy discussion fora. 
+
+Three researchers - one postdoc, one doctoral student, and one master's student coded the content of the URLs
+
+We developed a code book and made our analysis available here. 
+
+# Analysis
+
+```{r setup2, include=FALSE, warning=FALSE,message=FALSE}
+library(lubridate)
+library(readr)
+library(data.table)
+library(tidytext)
+library(entropy)
+library(reshape2)
+library(ggplot2)
+library(scales)
+library(dplyr)
+library(tm)
+library(rapport)
+library(knitr)
+library(kableExtra)
+library(corpus)
+library(cowplot)
+library(gridExtra)
+library(caret)
+library(rcompanion)
+library(pROC)
+library(ngram)
+library(urltools)
+
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+## Gives count, mean, standard deviation, standard error of the mean, and confidence interval (default 95%).
+##   data: a data frame.
+##   measurevar: the name of a column that contains the variable to be summariezed
+##   groupvars: a vector containing names of columns that contain grouping variables
+##   na.rm: a boolean that indicates whether to ignore NA's
+##   conf.interval: the percent range of the confidence interval (default is 95%)
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+    library(plyr)
+
+    # New version of length which can handle NA's: if na.rm==T, don't count them
+    length2 <- function (x, na.rm=FALSE) {
+        if (na.rm) sum(!is.na(x))
+        else       length(x)
+    }
+
+    # This does the summary. For each group's data frame, return a vector with
+    # N, mean, and sd
+    datac <- ddply(data, groupvars, .drop=.drop,
+      .fun = function(xx, col) {
+        c(N    = length2(xx[[col]], na.rm=na.rm),
+          mean = mean   (xx[[col]], na.rm=na.rm),
+          sd   = sd     (xx[[col]], na.rm=na.rm)
+        )
+      },
+      measurevar
+    )
+
+    # Rename the "mean" column    
+    datac <- rename(datac, c("mean" = measurevar))
+
+    datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+
+    # Confidence interval multiplier for standard error
+    # Calculate t-statistic for confidence interval: 
+    # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+    ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+    datac$ci <- datac$se * ciMult
+
+    return(datac)
+}
+
+# A function for calculating entropy. Takes only rows as values
+entfun <- function(x)
+{
+ 	entropy(x, method = "ML")
+}
+
+theme_Publication <- function(base_size=14, base_family="helvetica") {
+      library(grid)
+      library(ggthemes)
+      (theme_foundation(base_size=base_size, base_family=base_family)
+       + theme(plot.title = element_text(face = "bold",
+                                         size = rel(1.2), hjust = 0.5),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(face = "bold",size = rel(1)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.key.size= unit(0.2, "cm"),
+               legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(10,5,5,5),"mm"),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+               strip.text = element_text(face="bold")
+          ))
+      
+}
+
+scale_fill_Publication <- function(...){
+      library(scales)
+      discrete_scale("fill","Publication",manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+
+}
+
+scale_colour_Publication <- function(...){
+      library(scales)
+      discrete_scale("colour","Publication",manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+}
+
+# Gravity Spy roles
+experts <- c("uber_pye","areeda","mzevin1","RF45","jrsmith02","sbc538")
+
+collaborators <- c("adamamiller","olipatane","smarttiz","jafeldt","mcoughlin","citizenscientist1994","cjackso3",
+                   "camallen","lmp579","sciencejedi","crowston","Carsten","jessiemcd","ejm553","srallen",
+                   "costerlu@syr.edu","lcalian","joeykey","matsoulina","trouille","zooniverse")
+
+moderators <- c("achilles308","futurewaves","wavewavewave","EcceruElme")
+
+glitches <- c("blip","paireddoves","wanderline","extremelyloud","1080line","helix","whistle","noglitch","repeatingblips","lowfrequencyburst","aircompressor","lightmodulation","chirp","tomte","koifish","powerline60hz","1400ripple","violinmodeharmonic","scratchy","scatteredlight")
+
+# problem in stargazer with stargazer automatically recalculates t values with the new coefficients when certain functions are included
+stargazer2 <- function(model, odd.ratio = F, ...) {
+  if(!("list" %in% class(model))) model <- list(model)
+    
+  if (odd.ratio) {
+    coefOR2 <- lapply(model, function(x) exp(coef(x)))
+    seOR2 <- lapply(model, function(x) exp(coef(x)) * summary(x)$coef[, 2])
+    p2 <- lapply(model, function(x) summary(x)$coefficients[, 4])
+    stargazer(model, coef = coefOR2, se = seOR2, p = p2, ...)
+    
+  } else {
+    stargazer(model, ...)
+  }
+}
+
+#detach(package:plyr)
+library(dplyr)
+library(stringr)
+
+```
+
+```{r, include=FALSE, warning=FALSE,message=FALSE, cache=TRUE}
+if(any(grepl("package:plyr", search()))) detach("package:plyr") else message("plyr not loaded")
+library(dplyr)
+
+comments <- read_csv("~/Dropbox/Research/Language Socialization/Data/gravity-spy-comments.csv")
+comments <- comments[,-c(1:3)] #clean comments 
+
+unigram_comments <- comments %>% 
+  unnest_tokens(unigram, 
+                comment_body,token = "regex")
+
+# extract links from comments 
+url_pattern <- "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+
+unigram_comments$URL <- str_extract(unigram_comments$unigram, url_pattern)
+# extract @ 
+unigram_comments$URL <- gsub(")", "",unigram_comments$URL)
+# extract @ 
+mention_pattern <- "@\\w+"
+unigram_comments$mentions <- str_extract(unigram_comments$unigram, mention_pattern)
+
+
+url_comments <- unigram_comments[which(!is.na(unigram_comments$URL)),] # extract all comments with URLS
+url_comments <- merge(url_comments,comments[,c("comment_body","comment_id")], by = "comment_id")# join actual comment for context
+
+mention_comments <- unigram_comments[which(!is.na(unigram_comments$mentions)),] # extract all comments with mentions
+mention_comments <- merge(mention_comments,comments[,c("comment_body","comment_id")], by = "comment_id")# join actual comment for context
+
+remove(unigram_comments)
+
+#domain <- function(x) strsplit(gsub("http://|https://|www\\.", "", x), "/")[[c(1, 1)]]
+#https://cran.r-project.org/web/packages/urltools/vignettes/urltools.html
+
+# Parse URLs
+
+parsed_address <- url_parse(url_comments$URL)
+url_comments <- cbind(url_comments,parsed_address)
+
+
+url_comments$role <- ifelse(url_comments$comment_user_login %in% collaborators,"collaborator",
+                                     ifelse(url_comments$comment_user_login %in% experts,"expert",
+                                            ifelse(url_comments$comment_user_login %in% moderators,"moderator","volunteer")))
+
+url_comments$role[url_comments$comment_created_at < "2017-01-01"  & url_comments$comment_user_login %in% moderators] <- "volunteer"
+url_comments$role[url_comments$comment_created_at < "2017-02-01"   & url_comments$comment_user_login == "futurewaves"] <- "volunteer"
+
+url_comments$type <- ifelse(grepl("zooniverse",url_comments$domain),"internal","external")
+
+# clean paths manually
+url_comments$path2 <- gsub("projects/zooniverse/gravity-spy/talk.*","projects/zooniverse/gravity-spy/talk",url_comments$path)
+url_comments$path3 <- gsub("collections/.*","collections/",url_comments$path2)
+
+#setwd("~/Dropbox/Research/Postdoc Research/Linking Up")
+#write.csv(url_comments,"url-comments.csv")
+```
+
+# Links Shared in Gravity Spy
+The dataset contained `r dim(comments)[1]` comments posted by `r length(unique(comments$comment_user_login))` volunteers. Posting in Gravity Spy is an uncommon activity as only `r length(unique(comments$comment_user_login))/10000` people who classified in Gravity Spy actually posted comments. In total, volunteers shared `r dim(url_comments)[1]` links in the Gravity Spy discussion fora. The number of links referencing resources outside the project website was `r table(url_comments$type)[1]` (`r table(url_comments$type)[1]/dim(url_comments)[1]`%) while there were `r table(url_comments$type)[2]` (`r table(url_comments$type)[2]/dim(url_comments)[1]`%) internally referenced links. 
+
+## Domain Frequencies
+```{r, include=FALSE, warning=FALSE,message=FALSE}
+library(dplyr)
+url_comments1 <-  url_comments %>% 
+  group_by(domain) %>% 
+   tally() %>% 
+   mutate(freq = n / sum(n))
+url_comments1 <- arrange(url_comments1, -freq)
+```
+
+```{r}
+url_comments1 %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  scroll_box(width = "800px", height = "300px")
+```
+
+## Domain > Path Frequencies
+```{r, include=FALSE, warning=FALSE,message=FALSE}
+
+url_comments12 <-  url_comments %>% 
+  group_by(domain,path3) %>% 
+   tally()  %>%
+mutate(freq = n / sum(n))
+
+url_comments12 <- arrange(url_comments12, -n)
+
+# Sankey chart with networkD3
+library(networkD3)
+URL <- "https://cdn.rawgit.com/christophergandrud/networkD3/master/JSONdata/energy.json"
+Energy <- jsonlite::fromJSON(URL)
+
+# Now we have 2 data frames: a 'links' data frame with 3 columns (from, to, value), and a 'nodes' data frame that gives the name of each node.
+#head( Energy$links )
+#head( Energy$nodes )
+ 
+# Thus we can plot it
+p <- sankeyNetwork(Links = Energy$links, Nodes = Energy$nodes, Source = "source",
+              Target = "target", Value = "value", NodeID = "name",
+              units = "TWh", fontSize = 12, nodeWidth = 30)
+```
+
+```{r}
+url_comments12 %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  scroll_box(width = "800px", height = "300px")
+```
+
+### A sankey chart of common domain paths in Zooniverse
+```{r}
+p
+```
+
+# Volunteers sharing links Gravity Spy
+
+## Who shares links by user name
+```{r, include=FALSE, warning=FALSE,message=FALSE}
+url_comments13 <-  url_comments %>% 
+  group_by(comment_user_login) %>% 
+   tally() %>% 
+   mutate(freq = n / sum(n))
+url_comments13 <- arrange(url_comments13, -n)
+```
+
+```{r}
+url_comments13 %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  scroll_box(width = "800px", height = "300px")
+```
+
+## What links do users share? 
+```{r, include=FALSE, warning=FALSE,message=FALSE}
+url_comments14 <-  url_comments %>% 
+  group_by(comment_user_login,domain) %>% 
+   tally() %>% 
+   mutate(freq = n / sum(n))
+url_comments14 <- arrange(url_comments14, -n)
+```
+
+```{r}
+url_comments14 %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  scroll_box(width = "800px", height = "300px")
+```
+
+## Who shares links by user role
+```{r, include=FALSE, warning=FALSE,message=FALSE}
+url_comments15 <-  url_comments %>% 
+  group_by(role) %>% 
+   tally() %>% 
+   mutate(freq = n / sum(n))
+url_comments15 <- arrange(url_comments15, -n)
+```
+
+```{r}
+url_comments15 %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  scroll_box(width = "800px", height = "300px")
+```
+
+## What domains are shared by user role
+```{r, include=FALSE, warning=FALSE,message=FALSE}
+url_comments15 <-  url_comments %>% 
+  group_by(role,domain) %>% 
+   tally() %>% 
+   mutate(freq = n / sum(n))
+url_comments15 <- arrange(url_comments15, -n)
+```
+
+```{r}
+url_comments15 %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  scroll_box(width = "800px", height = "300px")
+```
+
+## What internal (Gravity Spy) links are shared by user role
+```{r, include=FALSE, warning=FALSE,message=FALSE}
+url_comments16 <-  url_comments %>% 
+  filter(type == "internal") %>% 
+  group_by(role,path3) %>% 
+   tally() %>% 
+   mutate(freq = n / sum(n))
+url_comments16 <- arrange(url_comments16, -n)
+```
+
+```{r}
+url_comments16 %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
+  scroll_box(width = "800px", height = "300px")
+```
+
+## Applying a coding to link resources
+
+### Findings to date
+
+
