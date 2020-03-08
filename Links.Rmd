@@ -192,7 +192,7 @@ library(stringr)
 if(any(grepl("package:plyr", search()))) detach("package:plyr") else message("plyr not loaded")
 library(dplyr)
 
-comments <- read_csv("~/Dropbox/Research/Language Socialization/Data/gravity-spy-comments.csv")
+comments <- read_csv("~/Dropbox/Research/Research/Language Socialization/Data/gravity-spy-comments.csv")
 comments <- comments[,-c(1:3)] #clean comments 
 
 unigram_comments <- comments %>% 
