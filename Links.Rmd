@@ -1,6 +1,6 @@
 ---
 title: "Linking Up: Towards a Typology of Social Knowledge Production in Virtual Citizen Science"
-author: "Corey Jackson"
+author: "Corey Jackson and Anishka Prakash Tahiliani"
 date: "`r Sys.time()`"
 output:
   html_document:
