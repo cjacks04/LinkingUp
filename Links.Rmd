@@ -37,6 +37,8 @@ We developed a code book and made our analysis available here.
 
 # Analysis
 
+Nath, C., Huh, J., Adupa, A. K., & Jonnalagadda, S. R. (2016). Website sharing in online health communities: a descriptive analysis. Journal of medical Internet research, 18(1), e11.
+
 ```{r setup2, include=FALSE, warning=FALSE,message=FALSE}
 library(lubridate)
 library(readr)
@@ -275,18 +277,18 @@ mutate(freq = n / sum(n))
 url_comments12 <- arrange(url_comments12, -n)
 
 # Sankey chart with networkD3
-library(networkD3)
-URL <- "https://cdn.rawgit.com/christophergandrud/networkD3/master/JSONdata/energy.json"
-Energy <- jsonlite::fromJSON(URL)
-
+# library(networkD3)
+# URL <- "https://cdn.rawgit.com/christophergandrud/networkD3/master/JSONdata/energy.json"
+# Energy <- jsonlite::fromJSON(URL)
+# 
 # Now we have 2 data frames: a 'links' data frame with 3 columns (from, to, value), and a 'nodes' data frame that gives the name of each node.
-#head( Energy$links )
-#head( Energy$nodes )
- 
+# head( Energy$links )
+# head( Energy$nodes )
+#  
 # Thus we can plot it
-p <- sankeyNetwork(Links = Energy$links, Nodes = Energy$nodes, Source = "source",
-              Target = "target", Value = "value", NodeID = "name",
-              units = "TWh", fontSize = 12, nodeWidth = 30)
+# p <- sankeyNetwork(Links = Energy$links, Nodes = Energy$nodes, Source = "source",
+#               Target = "target", Value = "value", NodeID = "name",
+#               units = "TWh", fontSize = 12, nodeWidth = 30)
 ```
 
 ```{r}
@@ -294,11 +296,6 @@ url_comments12 %>%
   kable() %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F) %>%
   scroll_box(width = "800px", height = "300px")
-```
-
-### A sankey chart of common domain paths in Zooniverse
-```{r}
-p
 ```
 
 # Volunteers sharing links Gravity Spy
